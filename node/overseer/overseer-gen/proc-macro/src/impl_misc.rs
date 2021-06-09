@@ -11,6 +11,7 @@ pub(crate) fn impl_misc(info: &OverseerInfo) -> Result<proc_macro2::TokenStream>
 	let subsystem_ctx_name = Ident::new(&(overseer_name.to_string() + "SubsystemContext"), overseer_name.span());
 	let consumes = &info.consumes();
 	let signal = &info.extern_signal_ty;
+	let wrapper_message = &info.message_wrapper;
 
 	let ts = quote! {
 		/// Connector to send messages towards all subsystems,
@@ -23,6 +24,30 @@ pub(crate) fn impl_misc(info: &OverseerInfo) -> Result<proc_macro2::TokenStream>
 			signals_received: SignalsReceived,
 		}
 
+		/// impl for wrapping message type
+		#[::polkadot_overseer_gen::async_trait]
+		impl SubsystemSender< #wrapper_message > for #subsystem_sender_name {
+			async fn send_message(&mut self, msg: #wrapper_message) {
+				self.channels.send_and_log_error(self.signals_received.load(), msg).await;
+			}
+
+			async fn send_messages<T>(&mut self, msgs: T)
+				where T: IntoIterator<Item = #wrapper_message> + Send, T::IntoIter: Send
+			{
+				// This can definitely be optimized if necessary.
+				for msg in msgs {
+					self.send_message(msg).await;
+				}
+			}
+
+			fn send_unbounded_message(&mut self, msg: #wrapper_message) {
+				self.channels.send_unbounded_and_log_error(self.signals_received.load(), msg);
+			}
+		}
+
+		// ... but also implement for all individual messages to avoid
+		// the necessity for manual wrapping, and do the conversion
+		// based on the generated `From::from` impl for the individual variants.
 		#(
 		#[::polkadot_overseer_gen::async_trait]
 		impl SubsystemSender< #consumes > for #subsystem_sender_name {

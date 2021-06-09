@@ -29,6 +29,7 @@ use sc_network::PeerId;
 use polkadot_node_network_protocol::request_response::{
 	request::IncomingRequest, v1, Protocol, RequestResponseConfig,
 };
+use polkadot_overseer::AllMessages;
 
 /// Multiplex incoming network requests.
 ///

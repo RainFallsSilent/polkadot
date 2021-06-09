@@ -24,17 +24,24 @@ use parity_scale_codec::{Encode, Decode};
 use parking_lot::Mutex;
 use futures::prelude::*;
 use futures::stream::BoxStream;
+use polkadot_overseer::Overseer;
 use sc_network::Event as NetworkEvent;
 use sp_consensus::SyncOracle;
 
+use polkadot_overseer::{AllMessages, OverseerSignal};
+use polkadot_overseer::gen::{
+	FromOverseer,
+	SpawnedSubsystem,
+	Subsystem, SubsystemContext, SubsystemError as OverseerError,
+	SubsystemResult as OverseerResult, SubsystemSender,
+};
 use polkadot_subsystem::{
-	ActivatedLeaf, ActiveLeavesUpdate, FromOverseer, OverseerSignal, SpawnedSubsystem,
-	Subsystem, SubsystemContext, SubsystemError, SubsystemResult, SubsystemSender,
+	errors::{SubsystemError, SubsystemResult},
+	ActivatedLeaf, ActiveLeavesUpdate,
 	messages::StatementDistributionMessage
 };
 use polkadot_subsystem::messages::{
-	NetworkBridgeMessage, AllMessages,
-	CollatorProtocolMessage, NetworkBridgeEvent,
+	NetworkBridgeMessage, CollatorProtocolMessage, NetworkBridgeEvent,
 };
 use polkadot_primitives::v1::{Hash, BlockNumber};
 use polkadot_node_network_protocol::{
@@ -291,13 +298,13 @@ impl<N, AD> NetworkBridge<N, AD> {
 	}
 }
 
-impl<Net, AD, Context> Subsystem<Context> for NetworkBridge<Net, AD>
+impl<Net, AD, Context> Subsystem<Context, SubsystemError> for NetworkBridge<Net, AD>
 	where
 		Net: Network + Sync,
 		AD: validator_discovery::AuthorityDiscovery,
-		Context: SubsystemContext<Message=NetworkBridgeMessage>,
+		Context: SubsystemContext<Message = NetworkBridgeMessage, Signal = OverseerSignal>,
 {
-	fn start(mut self, ctx: Context) -> SpawnedSubsystem {
+	fn start(mut self, ctx: Context) -> SpawnedSubsystem<SubsystemError> {
 		// The stream of networking events has to be created at initialization, otherwise the
 		// networking might open connections before the stream of events has been grabbed.
 		let network_stream = self.network_service.event_stream();
@@ -324,7 +331,7 @@ struct PeerData {
 #[derive(Debug)]
 enum UnexpectedAbort {
 	/// Received error from overseer:
-	SubsystemError(polkadot_subsystem::SubsystemError),
+	SubsystemError(SubsystemError),
 	/// The stream of incoming events concluded.
 	EventStreamConcluded,
 	/// The stream of incoming requests concluded.
@@ -334,6 +341,12 @@ enum UnexpectedAbort {
 impl From<SubsystemError> for UnexpectedAbort {
 	fn from(e: SubsystemError) -> Self {
 		UnexpectedAbort::SubsystemError(e)
+	}
+}
+
+impl From<OverseerError> for UnexpectedAbort {
+	fn from(e: OverseerError) -> Self {
+		UnexpectedAbort::SubsystemError(SubsystemError::from(e))
 	}
 }
 
@@ -361,7 +374,7 @@ async fn handle_subsystem_messages<Context, N, AD>(
 	metrics: Metrics,
 ) -> Result<(), UnexpectedAbort>
 where
-	Context: SubsystemContext<Message = NetworkBridgeMessage>,
+	Context: SubsystemContext<Message = NetworkBridgeMessage, Signal = OverseerSignal>,
 	N: Network,
 	AD: validator_discovery::AuthorityDiscovery,
 {
@@ -563,7 +576,7 @@ where
 }
 
 async fn handle_network_messages<AD: validator_discovery::AuthorityDiscovery>(
-	mut sender: impl SubsystemSender <AllMessages>,
+	mut sender: impl SubsystemSender<AllMessages>,
 	mut network_service: impl Network,
 	mut network_stream: BoxStream<'static, NetworkEvent>,
 	mut authority_discovery_service: AD,
@@ -830,7 +843,7 @@ async fn handle_network_messages<AD: validator_discovery::AuthorityDiscovery>(
 #[tracing::instrument(skip(bridge, ctx, network_stream), fields(subsystem = LOG_TARGET))]
 async fn run_network<N, AD>(
 	bridge: NetworkBridge<N, AD>,
-	mut ctx: impl SubsystemContext<Message=NetworkBridgeMessage>,
+	mut ctx: impl SubsystemContext<Message=NetworkBridgeMessage, Signal=OverseerSignal>,
 	network_stream: BoxStream<'static, NetworkEvent>,
 ) -> SubsystemResult<()>
 where
@@ -863,7 +876,7 @@ where
 
 	ctx.spawn("network-bridge-network-worker", Box::pin(remote)).await?;
 
-	ctx.send_message(AllMessages::StatementDistribution(
+	ctx.send_message(AllMessages::StatementDistributionMessage(
 		StatementDistributionMessage::StatementFetchingReceiver(statement_receiver)
 	)).await;
 
@@ -1079,21 +1092,21 @@ async fn send_collation_message<I>(
 
 async fn dispatch_validation_event_to_all(
 	event: NetworkBridgeEvent<protocol_v1::ValidationProtocol>,
-	ctx: &mut impl SubsystemSender <AllMessages>
+	ctx: &mut impl SubsystemSender<AllMessages>
 ) {
 	dispatch_validation_events_to_all(std::iter::once(event), ctx).await
 }
 
 async fn dispatch_collation_event_to_all(
 	event: NetworkBridgeEvent<protocol_v1::CollationProtocol>,
-	ctx: &mut impl SubsystemSender <AllMessages>
+	ctx: &mut impl SubsystemSender<AllMessages>
 ) {
 	dispatch_collation_events_to_all(std::iter::once(event), ctx).await
 }
 
 fn dispatch_validation_event_to_all_unbounded(
 	event: NetworkBridgeEvent<protocol_v1::ValidationProtocol>,
-	ctx: &mut impl SubsystemSender <AllMessages>
+	ctx: &mut impl SubsystemSender<AllMessages>
 ) {
 	for msg in AllMessages::dispatch_iter(event) {
 		ctx.send_unbounded_message(msg);
@@ -1102,7 +1115,7 @@ fn dispatch_validation_event_to_all_unbounded(
 
 fn dispatch_collation_event_to_all_unbounded(
 	event: NetworkBridgeEvent<protocol_v1::CollationProtocol>,
-	ctx: &mut impl SubsystemSender <AllMessages>
+	ctx: &mut impl SubsystemSender<AllMessages>
 ) {
 	if let Some(msg) = event.focus().ok().map(CollatorProtocolMessage::NetworkBridgeUpdateV1) {
 		ctx.send_unbounded_message(msg.into());
@@ -1112,7 +1125,7 @@ fn dispatch_collation_event_to_all_unbounded(
 #[tracing::instrument(level = "trace", skip(events, ctx), fields(subsystem = LOG_TARGET))]
 async fn dispatch_validation_events_to_all<I>(
 	events: I,
-	ctx: &mut impl SubsystemSender <AllMessages>
+	ctx: &mut impl SubsystemSender<AllMessages>
 )
 	where
 		I: IntoIterator<Item = NetworkBridgeEvent<protocol_v1::ValidationProtocol>>,
@@ -1124,14 +1137,14 @@ async fn dispatch_validation_events_to_all<I>(
 #[tracing::instrument(level = "trace", skip(events, ctx), fields(subsystem = LOG_TARGET))]
 async fn dispatch_collation_events_to_all<I>(
 	events: I,
-	ctx: &mut impl SubsystemSender <AllMessages>
+	ctx: &mut impl SubsystemSender<AllMessages>
 )
 	where
 		I: IntoIterator<Item = NetworkBridgeEvent<protocol_v1::CollationProtocol>>,
 		I::IntoIter: Send,
 {
 	let messages_for = |event: NetworkBridgeEvent<protocol_v1::CollationProtocol>| {
-		event.focus().ok().map(|m| AllMessages::CollatorProtocol(
+		event.focus().ok().map(|m| AllMessages::CollatorProtocolMessage(
 			CollatorProtocolMessage::NetworkBridgeUpdateV1(m)
 		))
 	};
