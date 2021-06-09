@@ -302,7 +302,7 @@ impl<Net, AD, Context> Subsystem<Context, SubsystemError> for NetworkBridge<Net,
 	where
 		Net: Network + Sync,
 		AD: validator_discovery::AuthorityDiscovery,
-		Context: SubsystemContext<Message = NetworkBridgeMessage, Signal = OverseerSignal>,
+		Context: SubsystemContext<Message = NetworkBridgeMessage, Signal = OverseerSignal, AllMessages = AllMessages>,
 {
 	fn start(mut self, ctx: Context) -> SpawnedSubsystem<SubsystemError> {
 		// The stream of networking events has to be created at initialization, otherwise the
@@ -374,7 +374,7 @@ async fn handle_subsystem_messages<Context, N, AD>(
 	metrics: Metrics,
 ) -> Result<(), UnexpectedAbort>
 where
-	Context: SubsystemContext<Message = NetworkBridgeMessage, Signal = OverseerSignal>,
+	Context: SubsystemContext<Message = NetworkBridgeMessage, Signal = OverseerSignal, AllMessages = AllMessages>,
 	N: Network,
 	AD: validator_discovery::AuthorityDiscovery,
 {
@@ -843,7 +843,7 @@ async fn handle_network_messages<AD: validator_discovery::AuthorityDiscovery>(
 #[tracing::instrument(skip(bridge, ctx, network_stream), fields(subsystem = LOG_TARGET))]
 async fn run_network<N, AD>(
 	bridge: NetworkBridge<N, AD>,
-	mut ctx: impl SubsystemContext<Message=NetworkBridgeMessage, Signal=OverseerSignal>,
+	mut ctx: impl SubsystemContext<Message=NetworkBridgeMessage, Signal=OverseerSignal, AllMessages=AllMessages>,
 	network_stream: BoxStream<'static, NetworkEvent>,
 ) -> SubsystemResult<()>
 where
@@ -864,7 +864,7 @@ where
 		.get_statement_fetching()
 		.expect("Gets initialized, must be `Some` on startup. qed.");
 
-	let (remote, network_event_handler) = handle_network_messages(
+	let (remote, network_event_handler) = handle_network_messages::<>(
 		ctx.sender().clone(),
 		network_service.clone(),
 		network_stream,
@@ -876,9 +876,9 @@ where
 
 	ctx.spawn("network-bridge-network-worker", Box::pin(remote)).await?;
 
-	ctx.send_message(AllMessages::StatementDistributionMessage(
-		StatementDistributionMessage::StatementFetchingReceiver(statement_receiver)
-	)).await;
+	ctx.send_message(
+		AllMessages::from(StatementDistributionMessage::StatementFetchingReceiver(statement_receiver))
+	).await;
 
 	let subsystem_event_handler = handle_subsystem_messages(
 		ctx,
@@ -940,7 +940,7 @@ fn construct_view(live_heads: impl DoubleEndedIterator<Item = Hash>, finalized_n
 #[tracing::instrument(level = "trace", skip(net, ctx, shared, metrics), fields(subsystem = LOG_TARGET))]
 async fn update_our_view(
 	net: &mut impl Network,
-	ctx: &mut impl SubsystemContext<Message = NetworkBridgeMessage>,
+	ctx: &mut impl SubsystemContext<Message=NetworkBridgeMessage, AllMessages=AllMessages>,
 	live_heads: &[ActivatedLeaf],
 	shared: &Shared,
 	finalized_number: BlockNumber,
