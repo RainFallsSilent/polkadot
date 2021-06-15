@@ -14,7 +14,7 @@ serde = { version = "1.0.123", default-features = false }
 serde_derive = { version = "1.0.117", optional = true }
 static_assertions = "1.1.0"
 
-beefy-primitives = { git = "https://github.com/paritytech/grandpa-bridge-gadget", default-features = false , branch = "polkadot-v0.9.3" }
+beefy-primitives = { git = "https://github.com/MrPai/grandpa-bridge-gadget", default-features = false , branch = "polkadot-v0.9.3" }
 sp-api = { git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
 inherents = { package = "sp-inherents", git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
 sp-std = { package = "sp-std", git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
@@ -36,7 +36,7 @@ pallet-offences = { git = "https://github.com/MrPai/substrate", default-features
 pallet-transaction-payment = { git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
 pallet-treasury = { git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
 
-pallet-beefy = { git = "https://github.com/paritytech/grandpa-bridge-gadget", default-features = false , branch = "polkadot-v0.9.3" }
+pallet-beefy = { git = "https://github.com/MrPai/grandpa-bridge-gadget", default-features = false , branch = "polkadot-v0.9.3" }
 pallet-mmr = { git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
 
 frame-benchmarking = { git = "https://github.com/MrPai/substrate", default-features = false, optional = true , branch = "polkadot-v0.9.3" }

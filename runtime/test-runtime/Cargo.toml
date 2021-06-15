@@ -16,7 +16,7 @@ smallvec = "1.6.1"
 
 authority-discovery-primitives = { package = "sp-authority-discovery", git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
 babe-primitives = { package = "sp-consensus-babe", git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
-beefy-primitives = { git = "https://github.com/paritytech/grandpa-bridge-gadget", default-features = false , branch = "polkadot-v0.9.3" }
+beefy-primitives = { git = "https://github.com/MrPai/grandpa-bridge-gadget", default-features = false , branch = "polkadot-v0.9.3" }
 sp-api = { git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
 inherents = { package = "sp-inherents", git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
 offchain-primitives = { package = "sp-offchain", git = "https://github.com/MrPai/substrate", default-features = false , branch = "polkadot-v0.9.3" }
