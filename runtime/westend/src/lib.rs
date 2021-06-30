@@ -387,7 +387,7 @@ parameter_types! {
 	// Six sessions in an era (6 hours).
 	pub const SessionsPerEra: SessionIndex = 6;
 	// 28 eras for unbonding (7 days).
-	pub const BondingDuration: pallet_staking::EraIndex = 28;
+	pub const BondingDuration: pallet_staking::EraIndex = 0;
 	// 27 eras in which slashes can be cancelled (slightly less than 7 days).
 	pub const SlashDeferDuration: pallet_staking::EraIndex = 27;
 	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
